@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import request, session
+from flask import request, session, make_response, jsonify
 from flask_restful import Resource
 from sqlalchemy.exc import IntegrityError
 
@@ -13,17 +13,21 @@ class Signup(Resource):
         user = User(
             username = json['username']
         )
-        user.password_hash = json['password']
-        db.session.add(user)
-        db.session.commit()
-        return user.to_dict(), 201
+        try:
+            user.password_hash = json['password']
+            db.session.add(user)
+            db.session.commit()
+            return user.to_dict(), 201
+        except IntegrityError:
+            db.session.rollback()
+            return {"error": "Username already exists."}, 422
 
 class CheckSession(Resource):
     def get(self):
         if session.get('user_id'):
             user = User.query.filter(User.id == session['user_id']).first()
             return user.to_dict(), 200
-        return {"error": "Please log in"}, 204
+        return {"error": "Please log in"}, 401
 
 class Login(Resource):
     def post(self):
@@ -47,10 +51,11 @@ class RecipeIndex(Resource):
     def get(self):
         user_id = session.get('user_id')
 
-        # if user_id: 
-        recipes = Recipe.query.filter_by(user_id=user_id).all()
-        return [recipe.to_dict() for recipe in recipes], 200
-        # return {"error": "Unauthorized"}, 401
+        if user_id: 
+            recipes = Recipe.query.filter_by(user_id=user_id).all()
+            return [recipe.to_dict() for recipe in recipes], 200
+        return {"error": "Unauthorized"}, 401
+    
 
 
 api.add_resource(Signup, '/signup', endpoint='signup')
